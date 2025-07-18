@@ -1,0 +1,9 @@
+{
+  "users": [
+    { "id": 1, "name": "Mustafa" },
+    { "id": 2, "name": "Duru" }
+  ],
+  "posts": [
+    { "id": 1, "title": "Merhaba", "content": "Dünya" }
+  ]
+}
