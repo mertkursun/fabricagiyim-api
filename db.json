@@ -4,8 +4,8 @@
     { "id": 2, "name": "Duru" }
   ],
   "posts": [
-    { date: '2025-07-20', time: '10:00', name: "Ozcan" },
-		{ date: '2025-07-21', time: '14:00', name: "Bulent" },
-		{ date: '2025-07-21', time: '09:00', name: "Ozcan" }
+    	{ date: '2025-07-20', time: '10:00', reservation: "Ozcan", name: "Mustafa", company: "Piytilab", email: "mkursun@piytilab.com", phone: "05522061858" },
+	{ date: '2025-07-21', time: '14:00', reservation: "Bulent", name: "Mustafa", company: "Piytilab", email: "mkursun@piytilab.com", phone: "05522061858" },
+	{ date: '2025-07-21', time: '09:00', reservation: "Ozcan", name: "Mustafa", company: "Piytilab", email: "mkursun@piytilab.com", phone: "05522061858" }
   ]
 }
