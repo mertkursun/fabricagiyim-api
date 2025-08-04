@@ -1,10 +1,13 @@
 {
-  "main": "api/server.js",
+  "name": "fabricagiyim-api-supabase",
+  "version": "1.0.0",
+  "type": "module",
   "scripts": {
-    "start": "node api/server.js"
+    "dev": "next dev",
+    "start": "next start"
   },
   "dependencies": {
-    "json-server": "^0.x",
-    "cors": "^2.x"
+    "@supabase/supabase-js": "^2.0.0",
+    "next": "^13.0.0"
   }
 }
