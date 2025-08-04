@@ -2,10 +2,11 @@ const jsonServer = require('json-server');
 const path = require('path');
 
 const server = jsonServer.create();
-const router = jsonServer.router(path.join(__dirname, '..', 'db.json')); // ✔️ doğru erişim
+const router = jsonServer.router(path.join(__dirname, '..', 'db.json'));
 const middlewares = jsonServer.defaults();
 
 server.use(middlewares);
+server.use(jsonServer.bodyParser); // ✅ Bu satır olmalı!
 server.use(jsonServer.rewriter({
   '/api/*': '/$1'
 }));
