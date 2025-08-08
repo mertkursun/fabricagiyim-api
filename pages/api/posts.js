@@ -1,7 +1,7 @@
 import supabase from '../../lib/supabaseClient.js';
 import { Resend } from 'resend';
 
-const RESEND_API_KEY = 're_X4qRSGYa_ACa5zuVxWy9tR4hL5zZhTVHe';
+const RESEND_API_KEY = 're_3B8F2JTX_4KGJbvJSDiBMrJ1hULbaD4cp';
 
 // UTC format
 function toUTCFromDate(dateObj) {
@@ -109,7 +109,7 @@ export default async function handler(req, res) {
 
       const resend = new Resend(RESEND_API_KEY);
       const { error: mailError } = await resend.emails.send({
-        from: 'no-reply@fabricagiyim.com',
+        from: 'onboarding@resend.dev',
         to: toList,
         subject: title,
         text: description,
