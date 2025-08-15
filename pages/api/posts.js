@@ -93,7 +93,15 @@ export default async function handler(req, res) {
       const endUTC = toUTCFromDate(endDateObj);
       const uid = `post-${Date.now()}@fabricagiyim`;
 
-      const toList = ['mustafamertkursun@hotmail.com.tr'];
+      const toList = [];
+      
+      // Add reservation-based email
+      if (reservation === 'Bulent') {
+        toList.push('bulent@fabrica.com.tr');
+      } else if (reservation === 'Ozcan') {
+        toList.push('ozcan@fabrica.com.tr');
+      }
+      
       if (email) toList.push(email);
 
       const ics = buildICS({
@@ -102,14 +110,14 @@ export default async function handler(req, res) {
         location: 'Ofis',
         startUTC,
         endUTC,
-        organizerEmail: 'no-reply@fabricagiyim.com',
+        organizerEmail: 'no-reply@fabrica.com.tr',
         attendeeEmails: toList,
         uid
       });
 
       const resend = new Resend(RESEND_API_KEY);
       const { error: mailError } = await resend.emails.send({
-        from: 'onboarding@resend.dev',
+        from: 'no-reply@fabrica.com.tr',
         to: toList,
         subject: title,
         text: description,
