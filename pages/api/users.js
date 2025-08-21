@@ -20,33 +20,37 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Name ve password gerekli' });
       }
 
-      // Users tablosundan name ve password ile eşleşen kaydı ara
-      const { data, error } = await supabase
+      // Debug için önce tüm kullanıcıları kontrol edelim
+      console.log('Gelen veriler:', { name, password });
+      
+      // Önce tüm kullanıcıları alalım ve manuel kontrol yapalım
+      const { data: allUsers, error: fetchError } = await supabase
         .from('users')
-        .select('*')
-        .eq('name', name)
-        .eq('password', password)
-        .single();
-
-      if (error) {
-        if (error.code === 'PGRST116') {
-          // Kayıt bulunamadı
-          return res.status(401).json({ 
-            success: false, 
-            message: 'Kullanıcı adı veya şifre hatalı' 
-          });
-        }
-        return res.status(500).json({ error: error.message });
+        .select('*');
+      
+      if (fetchError) {
+        console.error('Kullanıcıları getirme hatası:', fetchError);
+        return res.status(500).json({ error: fetchError.message });
       }
-
-      if (data) {
+      
+      console.log('Tüm kullanıcılar:', allUsers);
+      
+      // Manuel olarak eşleşme kontrolü yapalım
+      const matchedUser = allUsers.find(user => 
+        user.name && user.name.toLowerCase() === name.toLowerCase() &&
+        user.password && user.password === password
+      );
+      
+      console.log('Eşleşen kullanıcı:', matchedUser);
+      
+      if (matchedUser) {
         // Giriş başarılı
         return res.status(200).json({ 
           success: true, 
           message: 'Giriş başarılı',
           user: {
-            name: data.name,
-            id: data.id
+            name: matchedUser.name,
+            id: matchedUser.id
           }
         });
       } else {
