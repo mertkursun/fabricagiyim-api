@@ -2,8 +2,11 @@ import supabase from '../../lib/supabaseClient.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   if (req.method === 'GET') {
@@ -127,6 +130,69 @@ export default async function handler(req, res) {
     }
   }
 
-  res.setHeader('Allow', ['GET', 'POST', 'OPTIONS']);
+  if (req.method === 'DELETE') {
+    try {
+      const { id } = req.query;
+
+      if (!id) {
+        return res.status(400).json({ error: 'ID parametresi gerekli' });
+      }
+
+      // Önce announcement'ı bul ve image URL'ini al
+      const { data: announcement, error: fetchError } = await supabase
+        .from('announcements')
+        .select('image')
+        .eq('id', id)
+        .single();
+
+      if (fetchError) {
+        console.error('Announcement fetch error:', fetchError);
+        return res.status(404).json({ error: 'Announcement bulunamadı' });
+      }
+
+      // Eğer image varsa, Supabase Storage'dan sil
+      if (announcement.image) {
+        try {
+          // URL'den dosya adını çıkar
+          const urlParts = announcement.image.split('/');
+          const fileName = urlParts[urlParts.length - 1];
+
+          const { error: deleteImageError } = await supabase.storage
+            .from('image')
+            .remove([fileName]);
+
+          if (deleteImageError) {
+            console.error('Image delete error:', deleteImageError);
+            // Image silinmese bile devam et
+          }
+        } catch (imageError) {
+          console.error('Image processing error:', imageError);
+          // Image silinmese bile devam et
+        }
+      }
+
+      // Veritabanından announcement'ı sil
+      const { error: deleteError } = await supabase
+        .from('announcements')
+        .delete()
+        .eq('id', id);
+
+      if (deleteError) {
+        console.error('DELETE announcements error:', deleteError);
+        return res.status(500).json({ error: deleteError.message });
+      }
+
+      return res.status(200).json({ 
+        success: true, 
+        message: 'Announcement başarıyla silindi' 
+      });
+
+    } catch (err) {
+      console.error('DELETE announcements error:', err);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  res.setHeader('Allow', ['GET', 'POST', 'DELETE', 'OPTIONS']);
   return res.status(405).json({ error: 'Method Not Allowed' });
 } 
