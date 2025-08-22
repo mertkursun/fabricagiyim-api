@@ -41,15 +41,22 @@ export default async function handler(req, res) {
       // Eğer image verisi varsa, Supabase Storage'a yükle
       if (image) {
         try {
+          let mimeType = 'image/jpeg'; // Default MIME type
+          let base64Data = image;
+          
           // Base64 formatını ve dosya tipini algıla
           const matches = image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
           
-          if (!matches || matches.length !== 3) {
-            return res.status(400).json({ error: 'Geçersiz resim formatı' });
+          if (matches && matches.length === 3) {
+            // Data URL formatında gelmiş
+            mimeType = matches[1];
+            base64Data = matches[2];
+          } else {
+            // Sadece base64 string olarak gelmiş - JPEG olarak varsay
+            mimeType = 'image/jpeg';
+            base64Data = image;
           }
           
-          const mimeType = matches[1];
-          const base64Data = matches[2];
           const buffer = Buffer.from(base64Data, 'base64');
           
           // Dosya uzantısını belirle
