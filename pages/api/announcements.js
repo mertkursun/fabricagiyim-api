@@ -138,11 +138,18 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'ID parametresi gerekli' });
       }
 
+      // ID'yi integer'a çevir
+      const announcementId = parseInt(id, 10);
+      
+      if (isNaN(announcementId)) {
+        return res.status(400).json({ error: 'Geçersiz ID formatı' });
+      }
+
       // Önce announcement'ı bul ve image URL'ini al
       const { data: announcement, error: fetchError } = await supabase
         .from('announcements')
         .select('image')
-        .eq('id', id)
+        .eq('id', announcementId)
         .single();
 
       if (fetchError) {
@@ -175,7 +182,7 @@ export default async function handler(req, res) {
       const { error: deleteError } = await supabase
         .from('announcements')
         .delete()
-        .eq('id', id);
+        .eq('id', announcementId);
 
       if (deleteError) {
         console.error('DELETE announcements error:', deleteError);
