@@ -133,71 +133,71 @@ export default async function handler(req, res) {
   if (req.method === 'DELETE') {
     try {
       const { id } = req.query;
-      if (!id) return res.status(400).json({ error: 'ID parametresi gerekli' });
-  
-      // id int ise Number, uuid ise string kalsın
-      const announcementId = Number.isNaN(Number(id)) ? id : Number(id);
-  
-      // 1) Kayıt + image URL al (admin ile → RLS yok)
-      const { data: announcement, error: fetchError } = await supabaseAdmin
+
+      if (!id) {
+        return res.status(400).json({ error: 'ID parametresi gerekli' });
+      }
+
+      // ID'yi integer'a çevir
+      const announcementId = parseInt(id, 10);
+      
+      if (isNaN(announcementId)) {
+        return res.status(400).json({ error: 'Geçersiz ID formatı' });
+      }
+
+      // Önce announcement'ı bul ve image URL'ini al
+      const { data: announcement, error: fetchError } = await supabase
         .from('announcements')
-        .select('id, image')
+        .select('image')
         .eq('id', announcementId)
         .single();
-  
+
       if (fetchError) {
-        console.error('FETCH', fetchError);
-        return res.status(404).json({ error: `FETCH: ${fetchError.message}` });
+        console.error('Announcement fetch error:', fetchError);
+        return res.status(404).json({ error: 'Announcement bulunamadı' });
       }
-      if (!announcement) return res.status(404).json({ error: 'Kayıt yok' });
-  
-      // 2) Storage'dan dosyayı sil (varsa) — tam object path kullan
+
+      // Eğer image varsa, Supabase Storage'dan sil
       if (announcement.image) {
         try {
-          const { bucket, objectPath } = extractStoragePath(announcement.image);
-          if (bucket && objectPath) {
-            const { error: rmErr } = await supabaseAdmin.storage.from(bucket).remove([objectPath]);
-            if (rmErr) {
-              console.error('Storage remove error:', rmErr);
-              // Görsel silinmese de DB kaydını sileceğiz, sadece loglayalım
-            }
+          // URL'den dosya adını çıkar
+          const urlParts = announcement.image.split('/');
+          const fileName = urlParts[urlParts.length - 1];
+
+          const { error: deleteImageError } = await supabase.storage
+            .from('image')
+            .remove([fileName]);
+
+          if (deleteImageError) {
+            console.error('Image delete error:', deleteImageError);
+            // Image silinmese bile devam et
           }
-        } catch (e) {
-          console.error('extractStoragePath error', e);
+        } catch (imageError) {
+          console.error('Image processing error:', imageError);
+          // Image silinmese bile devam et
         }
       }
-  
-      // 3) DB'den sil ve gerçekten silindi mi kontrol et
-      const { data: deletedRows, error: deleteError } = await supabaseAdmin
+
+      // Veritabanından announcement'ı sil
+      const { error: deleteError } = await supabase
         .from('announcements')
         .delete()
-        .eq('id', announcementId)
-        .select('id'); // silinen satırları geri döndürür
-  
+        .eq('id', announcementId);
+
       if (deleteError) {
-        console.error('DELETE', deleteError);
-        return res.status(500).json({ error: `DELETE: ${deleteError.message}` });
+        console.error('DELETE announcements error:', deleteError);
+        return res.status(500).json({ error: deleteError.message });
       }
-  
-      if (!deletedRows || deletedRows.length === 0) {
-        return res.status(404).json({ error: 'DELETE: Eşleşme yok (yanlış id?)' });
-      }
-  
-      return res.status(200).json({ success: true, message: 'Announcement başarıyla silindi' });
+
+      return res.status(200).json({ 
+        success: true, 
+        message: 'Announcement başarıyla silindi' 
+      });
+
     } catch (err) {
-      console.error('UNCAUGHT', err);
-      return res.status(500).json({ error: `UNCAUGHT: ${err.message}` });
+      console.error('DELETE announcements error:', err);
+      return res.status(500).json({ error: 'Internal server error' });
     }
-  }
-  
-  // Yardımcı: public URL → bucket & objectPath
-  function extractStoragePath(publicUrl) {
-    const marker = '/storage/v1/object/public/';
-    const i = publicUrl.indexOf(marker);
-    if (i === -1) return { bucket: null, objectPath: null };
-    const after = publicUrl.slice(i + marker.length); // "<bucket>/<objectPath>"
-    const [bucket, ...rest] = after.split('/');
-    return { bucket, objectPath: rest.join('/') };
   }
 
   res.setHeader('Allow', ['GET', 'POST', 'DELETE', 'OPTIONS']);
