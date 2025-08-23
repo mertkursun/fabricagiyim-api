@@ -133,86 +133,70 @@ export default async function handler(req, res) {
   if (req.method === 'DELETE') {
     try {
       const { id } = req.query;
+      if (!id) return res.status(400).json({ error: 'ID parametresi gerekli' });
 
-      if (!id) {
-        return res.status(400).json({ error: 'ID parametresi gerekli' });
-      }
+      // id tipi: int veya uuid olabilir. Sayıysa Number'a çevir, değilse string kalsın.
+      const announcementId = Number.isNaN(Number(id)) ? id : Number(id);
 
-      // ID'yi integer'a çevir
-      const announcementId = parseInt(id, 10);
-      
-      if (isNaN(announcementId)) {
-        return res.status(400).json({ error: 'Geçersiz ID formatı' });
-      }
-
-      // Önce announcement'ı bul ve image URL'ini al
-      const { data: announcement, error: fetchError } = await supabase
+      // Kayıt + image URL çek → admin (RLS sorunsuz)
+      const { data: announcement, error: fetchError } = await supabaseAdmin
         .from('announcements')
-        .select('image')
+        .select('id, image')
         .eq('id', announcementId)
         .single();
 
-      if (fetchError) {
+      if (fetchError || !announcement) {
         console.error('Announcement fetch error:', fetchError);
         return res.status(404).json({ error: 'Announcement bulunamadı' });
       }
 
-      // Eğer image varsa, Supabase Storage'dan sil
+      // Storage'dan resmi sil (varsa) → doğru object path ile
       if (announcement.image) {
         try {
-          // URL'den dosya adını çıkar
-          const urlParts = announcement.image.split('/');
-          const fileName = urlParts[urlParts.length - 1];
+          const u = new URL(announcement.image);
+          const marker = '/storage/v1/object/public/';
+          const idx = u.pathname.indexOf(marker);
 
-          const { error: deleteImageError } = await supabase.storage
-            .from('image')
-            .remove([fileName]);
+          if (idx !== -1) {
+            const after = u.pathname.slice(idx + marker.length); // "<bucket>/<objectPath>"
+            const [bucket, ...rest] = after.split('/');
+            const objectPath = rest.join('/'); // "foo.jpg" veya "folder/foo.jpg"
 
-          if (deleteImageError) {
-            console.error('Image delete error:', deleteImageError);
-            // Image silinmese bile devam et
+            if (bucket && objectPath) {
+              const { error: removeErr } = await supabaseAdmin.storage
+                .from(bucket)
+                .remove([objectPath]);
+
+              if (removeErr) {
+                console.error('Image delete error:', removeErr);
+                // Görsel silinmese de DB kaydını silebiliriz; sadece logla.
+              }
+            }
           }
         } catch (imageError) {
-          console.error('Image processing error:', imageError);
-          // Image silinmese bile devam et
+          console.error('Image URL parse error:', imageError);
         }
       }
 
-      // Veritabanından announcement'ı sil
-      console.log('Deleting announcement with ID:', announcementId);
-      const { data: deletedData, error: deleteError, count } = await supabase
+      // DB'den sil → gerçekten silindi mi kontrol et
+      const { data: deletedRows, error: deleteError } = await supabaseAdmin
         .from('announcements')
         .delete()
         .eq('id', announcementId)
-        .select();
-
-      console.log('Delete operation result:', {
-        deletedData,
-        deleteError,
-        count,
-        deletedCount: deletedData?.length || 0
-      });
+        .select('id');
 
       if (deleteError) {
         console.error('DELETE announcements error:', deleteError);
         return res.status(500).json({ error: deleteError.message });
       }
 
-      // Gerçekten silinip silinmediğini kontrol et
-      if (!deletedData || deletedData.length === 0) {
-        console.error('No rows were deleted');
-        return res.status(404).json({ 
-          success: false, 
-          message: 'Announcement bulunamadı veya silinemedi' 
-        });
+      if (!deletedRows || deletedRows.length === 0) {
+        return res.status(404).json({ error: 'Silinecek kayıt bulunamadı' });
       }
 
-      return res.status(200).json({ 
-        success: true, 
-        message: 'Announcement başarıyla silindi',
-        deletedItem: deletedData[0]
-      });
-
+      return res
+        .status(200)
+        .json({ success: true, message: 'Announcement başarıyla silindi' });
     } catch (err) {
       console.error('DELETE announcements error:', err);
       return res.status(500).json({ error: 'Internal server error' });
