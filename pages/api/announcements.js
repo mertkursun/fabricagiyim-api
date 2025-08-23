@@ -2,7 +2,7 @@ import supabase from '../../lib/supabaseClient.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.setHeader('Pragma', 'no-cache');
@@ -14,6 +14,7 @@ export default async function handler(req, res) {
       const { data, error } = await supabase
         .from('announcements')
         .select('*')
+        .eq('active', true)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -30,7 +31,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'POST') {
     try {
-      const { title_tr, title_en, desc_tr, desc_en, image } = req.body;
+      const { title_tr, title_en, desc_tr, desc_en, image, active } = req.body;
 
       // Zorunlu alanları kontrol et
       if (!title_tr || !title_en || !desc_tr || !desc_en) {
@@ -113,7 +114,8 @@ export default async function handler(req, res) {
           title_en, 
           desc_tr, 
           desc_en, 
-          image: imageUrl 
+          image: imageUrl,
+          active: active !== undefined ? active : true
         }])
         .select()
         .single();
@@ -130,12 +132,16 @@ export default async function handler(req, res) {
     }
   }
 
-  if (req.method === 'DELETE') {
+  if (req.method === 'PUT') {
     try {
-      const { id } = req.query;
+      const { id, active } = req.body;
 
       if (!id) {
         return res.status(400).json({ error: 'ID parametresi gerekli' });
+      }
+
+      if (active === undefined || active === null) {
+        return res.status(400).json({ error: 'active parametresi gerekli' });
       }
 
       // ID'yi integer'a çevir
@@ -145,61 +151,37 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Geçersiz ID formatı' });
       }
 
-      // Önce announcement'ı bul ve image URL'ini al
-      const { data: announcement, error: fetchError } = await supabase
+      // Active değerinin boolean olduğunu kontrol et
+      const isActive = Boolean(active);
+
+      // Veritabanında sadece active kolonunu güncelle
+      const { data: updated, error: updateError } = await supabase
         .from('announcements')
-        .select('image')
+        .update({ active: isActive })
         .eq('id', announcementId)
+        .select()
         .single();
 
-      if (fetchError) {
-        console.error('Announcement fetch error:', fetchError);
-        return res.status(404).json({ error: 'Announcement bulunamadı' });
-      }
-
-      // Eğer image varsa, Supabase Storage'dan sil
-      if (announcement.image) {
-        try {
-          // URL'den dosya adını çıkar
-          const urlParts = announcement.image.split('/');
-          const fileName = urlParts[urlParts.length - 1];
-
-          const { error: deleteImageError } = await supabase.storage
-            .from('image')
-            .remove([fileName]);
-
-          if (deleteImageError) {
-            console.error('Image delete error:', deleteImageError);
-            // Image silinmese bile devam et
-          }
-        } catch (imageError) {
-          console.error('Image processing error:', imageError);
-          // Image silinmese bile devam et
+      if (updateError) {
+        console.error('PUT announcements error:', updateError);
+        if (updateError.code === 'PGRST116') {
+          return res.status(404).json({ error: 'Announcement bulunamadı' });
         }
-      }
-
-      // Veritabanından announcement'ı sil
-      const { error: deleteError } = await supabase
-        .from('announcements')
-        .delete()
-        .eq('id', announcementId);
-
-      if (deleteError) {
-        console.error('DELETE announcements error:', deleteError);
-        return res.status(500).json({ error: deleteError.message });
+        return res.status(500).json({ error: updateError.message });
       }
 
       return res.status(200).json({ 
         success: true, 
-        message: 'Announcement başarıyla silindi' 
+        message: `Announcement ${isActive ? 'aktif' : 'pasif'} hale getirildi`,
+        data: updated
       });
 
     } catch (err) {
-      console.error('DELETE announcements error:', err);
+      console.error('PUT announcements error:', err);
       return res.status(500).json({ error: 'Internal server error' });
     }
   }
 
-  res.setHeader('Allow', ['GET', 'POST', 'DELETE', 'OPTIONS']);
+  res.setHeader('Allow', ['GET', 'POST', 'PUT', 'OPTIONS']);
   return res.status(405).json({ error: 'Method Not Allowed' });
 } 
