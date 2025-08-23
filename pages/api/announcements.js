@@ -134,73 +134,70 @@ export default async function handler(req, res) {
     try {
       const { id } = req.query;
       if (!id) return res.status(400).json({ error: 'ID parametresi gerekli' });
-
-      // id tipi: int veya uuid olabilir. Sayıysa Number'a çevir, değilse string kalsın.
+  
+      // id int ise Number, uuid ise string kalsın
       const announcementId = Number.isNaN(Number(id)) ? id : Number(id);
-
-      // Kayıt + image URL çek → admin (RLS sorunsuz)
+  
+      // 1) Kayıt + image URL al (admin ile → RLS yok)
       const { data: announcement, error: fetchError } = await supabaseAdmin
         .from('announcements')
         .select('id, image')
         .eq('id', announcementId)
         .single();
-
-      if (fetchError || !announcement) {
-        console.error('Announcement fetch error:', fetchError);
-        return res.status(404).json({ error: 'Announcement bulunamadı' });
+  
+      if (fetchError) {
+        console.error('FETCH', fetchError);
+        return res.status(404).json({ error: `FETCH: ${fetchError.message}` });
       }
-
-      // Storage'dan resmi sil (varsa) → doğru object path ile
+      if (!announcement) return res.status(404).json({ error: 'Kayıt yok' });
+  
+      // 2) Storage'dan dosyayı sil (varsa) — tam object path kullan
       if (announcement.image) {
         try {
-          const u = new URL(announcement.image);
-          const marker = '/storage/v1/object/public/';
-          const idx = u.pathname.indexOf(marker);
-
-          if (idx !== -1) {
-            const after = u.pathname.slice(idx + marker.length); // "<bucket>/<objectPath>"
-            const [bucket, ...rest] = after.split('/');
-            const objectPath = rest.join('/'); // "foo.jpg" veya "folder/foo.jpg"
-
-            if (bucket && objectPath) {
-              const { error: removeErr } = await supabaseAdmin.storage
-                .from(bucket)
-                .remove([objectPath]);
-
-              if (removeErr) {
-                console.error('Image delete error:', removeErr);
-                // Görsel silinmese de DB kaydını silebiliriz; sadece logla.
-              }
+          const { bucket, objectPath } = extractStoragePath(announcement.image);
+          if (bucket && objectPath) {
+            const { error: rmErr } = await supabaseAdmin.storage.from(bucket).remove([objectPath]);
+            if (rmErr) {
+              console.error('Storage remove error:', rmErr);
+              // Görsel silinmese de DB kaydını sileceğiz, sadece loglayalım
             }
           }
-        } catch (imageError) {
-          console.error('Image URL parse error:', imageError);
+        } catch (e) {
+          console.error('extractStoragePath error', e);
         }
       }
-
-      // DB'den sil → gerçekten silindi mi kontrol et
+  
+      // 3) DB'den sil ve gerçekten silindi mi kontrol et
       const { data: deletedRows, error: deleteError } = await supabaseAdmin
         .from('announcements')
         .delete()
         .eq('id', announcementId)
-        .select('id');
-
+        .select('id'); // silinen satırları geri döndürür
+  
       if (deleteError) {
-        console.error('DELETE announcements error:', deleteError);
-        return res.status(500).json({ error: deleteError.message });
+        console.error('DELETE', deleteError);
+        return res.status(500).json({ error: `DELETE: ${deleteError.message}` });
       }
-
+  
       if (!deletedRows || deletedRows.length === 0) {
-        return res.status(404).json({ error: 'Silinecek kayıt bulunamadı' });
+        return res.status(404).json({ error: 'DELETE: Eşleşme yok (yanlış id?)' });
       }
-
-      return res
-        .status(200)
-        .json({ success: true, message: 'Announcement başarıyla silindi' });
+  
+      return res.status(200).json({ success: true, message: 'Announcement başarıyla silindi' });
     } catch (err) {
-      console.error('DELETE announcements error:', err);
-      return res.status(500).json({ error: 'Internal server error' });
+      console.error('UNCAUGHT', err);
+      return res.status(500).json({ error: `UNCAUGHT: ${err.message}` });
     }
+  }
+  
+  // Yardımcı: public URL → bucket & objectPath
+  function extractStoragePath(publicUrl) {
+    const marker = '/storage/v1/object/public/';
+    const i = publicUrl.indexOf(marker);
+    if (i === -1) return { bucket: null, objectPath: null };
+    const after = publicUrl.slice(i + marker.length); // "<bucket>/<objectPath>"
+    const [bucket, ...rest] = after.split('/');
+    return { bucket, objectPath: rest.join('/') };
   }
 
   res.setHeader('Allow', ['GET', 'POST', 'DELETE', 'OPTIONS']);
