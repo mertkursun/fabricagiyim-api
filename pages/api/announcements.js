@@ -179,19 +179,38 @@ export default async function handler(req, res) {
       }
 
       // Veritabanından announcement'ı sil
-      const { error: deleteError } = await supabase
+      console.log('Deleting announcement with ID:', announcementId);
+      const { data: deletedData, error: deleteError, count } = await supabase
         .from('announcements')
         .delete()
-        .eq('id', announcementId);
+        .eq('id', announcementId)
+        .select();
+
+      console.log('Delete operation result:', {
+        deletedData,
+        deleteError,
+        count,
+        deletedCount: deletedData?.length || 0
+      });
 
       if (deleteError) {
         console.error('DELETE announcements error:', deleteError);
         return res.status(500).json({ error: deleteError.message });
       }
 
+      // Gerçekten silinip silinmediğini kontrol et
+      if (!deletedData || deletedData.length === 0) {
+        console.error('No rows were deleted');
+        return res.status(404).json({ 
+          success: false, 
+          message: 'Announcement bulunamadı veya silinemedi' 
+        });
+      }
+
       return res.status(200).json({ 
         success: true, 
-        message: 'Announcement başarıyla silindi' 
+        message: 'Announcement başarıyla silindi',
+        deletedItem: deletedData[0]
       });
 
     } catch (err) {
